@@ -1,0 +1,62 @@
+Adopaws — Backend Installation Guide
+
+1. Install required software
+Install .NET 10 SDK
+https://dotnet.microsoft.com/download/dotnet/10.0
+
+Install .NET 8 Runtime (required by EF Core tools internally)
+https://dotnet.microsoft.com/download/dotnet/8.0
+
+Install SQL Server (Developer edition is free)
+https://www.microsoft.com/en-us/sql-server/sql-server-downloads
+
+2. Install EF Core CLI tool
+Open PowerShell and run:
+dotnet tool install --global dotnet-ef --version 10.0.4 --framework net10.0
+
+3. Extract the project
+Unzip Adopaws-Backend.zip and place it somewhere like C:\Projects\Adopaws\
+
+4. Restore packages
+Navigate to the folder containing Adopaws.sln and run: dotnet restore
+
+5. Configure the connection string
+Open Adopaws.Api\appsettings.json and set your SQL Server connection. The default works for a local SQL Server default instance:
+"ConnectionStrings": {
+  "DefaultConnection": "Server=.;Database=AdopawsDB;Trusted_Connection=True;TrustServerCertificate=True;"
+}
+If you use SQL Server Express, change Server=. to Server=.\SQLEXPRESS
+
+6. Add the EF Design package
+Still in the solution root folder: dotnet add Adopaws.Api package Microsoft.EntityFrameworkCore.Design --version 10.0.4
+
+7. Run migrations
+dotnet ef migrations add InitialCreate --project Adopaws.Infrastructure --startup-project Adopaws.Api
+
+dotnet ef database update --project Adopaws.Infrastructure --startup-project Adopaws.Api
+
+This creates the AdopawsDB database and all tables automatically.
+
+8. Start the API
+
+dotnet run --project Adopaws.Api
+
+The terminal will show something like:
+Now listening on: http://localhost:5000
+
+(Port fixed via Adopaws.Api\Properties\launchSettings.json — matches the frontend's default VITE_API_URL.)
+
+Open http://localhost:5000 in your browser — Swagger UI loads automatically and you can test all endpoints immediately.
+
+
+
+If something goes wrong
+
+Error						Fix
+project.assets.json not found			Run dotnet restore
+
+Framework 8.0.0 not found			Install .NET 8 Runtime
+
+There is already an object named 'Users'	Run dotnet ef database drop --project Adopaws.Infrastructure --startup-project 								Adopaws.Api --force then run database update again
+
+Connection failed				Make sure SQL Server is running (check in Windows Services)

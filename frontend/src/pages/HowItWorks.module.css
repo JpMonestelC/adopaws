@@ -1,0 +1,14 @@
+.page { padding: var(--space-12) 0 var(--space-20); }
+.hero { text-align: center; margin-bottom: var(--space-16); }
+.title { font-size: clamp(2rem, 5vw, 3.5rem); color: var(--color-bark); margin-bottom: var(--space-4); }
+.sub { font-size: var(--text-xl); color: var(--color-text-muted); }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-6); margin-bottom: var(--space-16); }
+.step { background: var(--color-surface); border: 1px solid var(--color-border-light); border-radius: var(--radius-lg); padding: var(--space-8); position: relative; }
+.stepNum { font-family: var(--font-display); font-size: 3rem; color: var(--color-border); font-weight: bold; margin-bottom: var(--space-3); }
+.stepEmoji { font-size: 2rem; margin-bottom: var(--space-3); }
+.stepTitle { font-size: var(--text-lg); color: var(--color-bark); margin-bottom: var(--space-2); }
+.stepDesc { font-size: var(--text-sm); color: var(--color-text-secondary); line-height: 1.6; }
+.cta { text-align: center; background: var(--color-sand); border-radius: var(--radius-xl); padding: var(--space-16); display: flex; flex-direction: column; align-items: center; gap: var(--space-6); }
+.cta h2 { font-size: var(--text-3xl); color: var(--color-bark); }
+@media (max-width: 900px) { .steps { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .steps { grid-template-columns: 1fr; } }
