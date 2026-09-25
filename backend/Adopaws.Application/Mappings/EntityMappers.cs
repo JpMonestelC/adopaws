@@ -91,3 +91,16 @@ public static class ConsultationMapper
         SentDate = c.SentDate
     };
 }
+
+public static class FavoriteMapper
+{
+    // Requiere que f.Pet venga cargado (ver FavoriteRepository, que siempre
+    // hace .Include(f => f.Pet)).
+    public static FavoriteDto ToDto(Favorite f) => new()
+    {
+        IdFavorite = f.IdFavorite,
+        IdPet = f.IdPet,
+        CreatedDate = f.CreatedDate,
+        Pet = PetMapper.ToDto(f.Pet)
+    };
+}

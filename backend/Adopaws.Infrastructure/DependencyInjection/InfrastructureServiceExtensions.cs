@@ -25,6 +25,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IMarketplaceItemRepository, MarketplaceItemRepository>();
         services.AddScoped<IConsultationRepository, ConsultationRepository>();
         services.AddScoped<IConsultationResponseRepository, ConsultationResponseRepository>();
+        services.AddScoped<IFavoriteRepository, FavoriteRepository>();
 
         // Security
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
@@ -38,6 +39,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IMarketplaceItemService, MarketplaceItemService>();
         services.AddScoped<IConsultationService, ConsultationService>();
         services.AddScoped<IConsultationResponseService, ConsultationResponseService>();
+        services.AddScoped<IFavoriteService, FavoriteService>();
 
         // AI Compatibility
         services.AddHttpClient("AnthropicClient");

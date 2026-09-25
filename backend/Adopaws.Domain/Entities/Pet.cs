@@ -21,4 +21,5 @@ public class Pet
     public User User { get; set; } = null!;
     public ICollection<PetPhoto> PetPhotos { get; set; } = new List<PetPhoto>();
     public ICollection<AdoptionRequest> AdoptionRequests { get; set; } = new List<AdoptionRequest>();
+    public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
 }

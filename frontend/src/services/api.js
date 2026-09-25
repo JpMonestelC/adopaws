@@ -7,9 +7,12 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Adjunta el JWT (si existe) a cada request saliente. Ningún endpoint
-// exige autenticación todavía ([Authorize] no está en los controladores),
-// pero el token ya viaja listo para cuando se protejan rutas.
+// Adjunta el JWT (si existe) a cada request saliente. La mayoría de rutas
+// de escritura y varias de lectura ahora exigen [Authorize] en el backend
+// (favoritos, mascotas/marketplace propios, solicitudes de adopción,
+// consultas, compatibilidad, /api/users) — ver los controladores en
+// Adopaws.Api/Controllers. Las rutas de solo lectura pensadas para ser
+// públicas (pets, marketplace-items, shelters) siguen sin requerir sesión.
 api.interceptors.request.use((config) => {
   try {
     const stored = localStorage.getItem("adopaws_user");
@@ -83,50 +86,30 @@ export const compatibilityService = {
     api.get(`/compatibility/recommendations/${userId}`, { params: { topN } }),
 };
 
-// ─── Favorites (simulado: no hay endpoint de backend aún) ─
-// Se guarda una lista de ids de mascota en localStorage por usuario,
-// para que "Mis favoritos" funcione de forma consistente sin backend.
-const FAVORITES_KEY = "adopaws_favorites";
-
-function readFavoriteIds() {
-  try {
-    const raw = localStorage.getItem(FAVORITES_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeFavoriteIds(ids) {
-  localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids));
-}
-
+// ─── Favorites (real: GET/POST/DELETE /api/favorites, requiere sesión) ───
+// El backend siempre identifica al usuario por el JWT (nunca recibe un
+// userId desde aquí), así que estas llamadas solo funcionan autenticado —
+// api.js ya adjunta el Bearer token en cada request (ver interceptor arriba).
 export const favoriteService = {
-  // Devuelve las mascotas favoritas completas (no solo ids), trayendo
-  // el detalle de cada una desde /api/pets/{id}.
+  // Devuelve las mascotas favoritas completas (no solo ids): el backend ya
+  // trae el detalle de cada mascota embebido en cada favorito.
   getFavorites: async () => {
-    const ids = readFavoriteIds();
-    if (ids.length === 0) return { data: [] };
-    const results = await Promise.allSettled(
-      ids.map((id) => api.get(`/pets/${id}`)),
-    );
-    const pets = results
-      .filter((r) => r.status === "fulfilled")
-      .map((r) => r.value.data);
-    return { data: pets };
+    const res = await api.get("/favorites");
+    const favoritos = Array.isArray(res.data) ? res.data : [];
+    return { data: favoritos.map((f) => f.pet) };
   },
 
-  isFavorite: (petId) => readFavoriteIds().includes(Number(petId)),
-
-  toggle: (petId) => {
-    const id = Number(petId);
-    const ids = readFavoriteIds();
-    const next = ids.includes(id)
-      ? ids.filter((existing) => existing !== id)
-      : [...ids, id];
-    writeFavoriteIds(next);
-    return next.includes(id);
+  isFavorite: async (petId) => {
+    try {
+      const res = await api.get(`/favorites/check/${petId}`);
+      return Boolean(res.data?.isFavorite);
+    } catch {
+      return false;
+    }
   },
+
+  add: (petId) => api.post(`/favorites/${petId}`),
+  remove: (petId) => api.delete(`/favorites/${petId}`),
 };
 
 // ─── Users ───────────────────────────────────────────────
@@ -205,31 +188,17 @@ export const consultationResponseService = {
 
 export default api;
 
-// ─── Shelters (simulado: son usuarios con userType === 'shelter') ─────────────
+// ─── Shelters (real: GET /api/shelters, público) ──────────────────────────
+// El backend ya filtra server-side por userType === 'shelter' (ver
+// SheltersController), así que el directorio público ya no necesita traer
+// la tabla completa de usuarios para armarse en el cliente.
 export const shelterService = {
-  // Trae todos los usuarios y filtra los que son refugio
-  getAll: async () => {
-    const res = await api.get("/users");
-    const shelters = (Array.isArray(res.data) ? res.data : []).filter(
-      (u) => u.userType === "shelter" || u.userType === "Shelter",
-    );
-    return { data: shelters };
-  },
+  getAll: () => api.get("/shelters"),
 
-  // Trae un refugio por id (es un usuario)
-  getById: async (id) => {
-    const res = await api.get(`/users/${id}`);
-    return res;
-  },
+  getById: (id) => api.get(`/shelters/${id}`),
 
-  // Trae las mascotas de un refugio específico (idUser = id del refugio)
-  getPetsByShelterId: async (shelterId) => {
-    const res = await api.get("/pets");
-    const pets = (Array.isArray(res.data) ? res.data : []).filter(
-      (p) => p.idUser === parseInt(shelterId),
-    );
-    return { data: pets };
-  },
+  // Trae las mascotas de un refugio específico
+  getPetsByShelterId: (shelterId) => api.get(`/shelters/${shelterId}/pets`),
 
   // Para el dashboard: trae las mascotas del usuario logueado
   getMyPets: async () => {

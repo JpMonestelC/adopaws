@@ -46,3 +46,12 @@ public interface IConsultationResponseRepository
     Task<ConsultationResponse?> GetByIdAsync(int id);
     Task<ConsultationResponse> CreateAsync(ConsultationResponse response);
 }
+
+public interface IFavoriteRepository
+{
+    Task<IEnumerable<Favorite>> GetByUserIdAsync(int userId);
+    Task<Favorite?> GetByIdAsync(int id);
+    Task<Favorite?> GetByUserAndPetAsync(int userId, int petId);
+    Task<Favorite> CreateAsync(Favorite favorite);
+    Task DeleteAsync(int id);
+}

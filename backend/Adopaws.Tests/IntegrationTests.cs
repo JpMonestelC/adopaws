@@ -44,6 +44,26 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
         _client = factory.CreateClient();
     }
 
+    /// <summary>Registra un usuario nuevo (email único) y devuelve su JWT, para
+    /// las pruebas que ejercen rutas protegidas con [Authorize].</summary>
+    private async Task<(string Token, int IdUser)> RegisterAndGetTokenAsync(string userType = "adopter")
+    {
+        var registro = new RegisterRequestDto
+        {
+            FullName = "Usuario de Prueba",
+            Email = $"auth{Guid.NewGuid():N}@integration.com",
+            Password = "clave-segura-123",
+            UserType = userType
+        };
+
+        var res = await _client.PostAsJsonAsync("/api/auth/register", registro);
+        res.EnsureSuccessStatusCode();
+
+        var result = await res.Content.ReadFromJsonAsync<AuthResultDto>();
+        Assert.NotNull(result);
+        return (result!.Token, result.User.IdUser);
+    }
+
     // ─── Auth ─────────────────────────────────────────────
     [Fact]
     public async Task Auth_RegistrarYLuegoLoguearse()
@@ -119,18 +139,12 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task Users_GetAll_NuncaDebeIncluirLaContraseña()
     {
-        var registro = new RegisterRequestDto
-        {
-            FullName = "Sin Password Expuesta",
-            Email = $"nopass{Guid.NewGuid():N}@integration.com",
-            Password = "clave-123",
-            UserType = "adopter"
-        };
-        await _client.PostAsJsonAsync("/api/auth/register", registro);
+        var (token, _) = await RegisterAndGetTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         var raw = await _client.GetStringAsync("/api/users");
 
-        Assert.DoesNotContain("clave-123", raw);
+        Assert.DoesNotContain("clave-segura-123", raw);
         Assert.DoesNotContain("\"password\"", raw, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -141,8 +155,8 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var nuevo = new CreateUserDto
         {
             FullName = "Juan Test",
-            Email = "juan@integration.com",
-            Password = "1234",
+            Email = $"juan{Guid.NewGuid():N}@integration.com",
+            Password = "clave-123",
             UserType = "adopter",
             Phone = "88881111",
             Region = "San José",
@@ -150,6 +164,7 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
             ProfileImage = ""
         };
 
+        // POST /api/users se mantiene anónimo: es un registro alterno (ver UsersController).
         var createRes = await _client.PostAsJsonAsync("/api/users", nuevo);
         Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
 
@@ -159,8 +174,18 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Users_GetAll_SinTokenDebeRetornar401()
+    {
+        var getRes = await _client.GetAsync("/api/users");
+        Assert.Equal(HttpStatusCode.Unauthorized, getRes.StatusCode);
+    }
+
+    [Fact]
     public async Task Users_ObtenerTodos()
     {
+        var (token, _) = await RegisterAndGetTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
         var getRes = await _client.GetAsync("/api/users");
         Assert.Equal(HttpStatusCode.OK, getRes.StatusCode);
     }
@@ -168,17 +193,36 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task Users_RetornarNotFoundSiNoExiste()
     {
-        var getRes = await _client.GetAsync("/api/users/99999");
+        var (token, _) = await RegisterAndGetTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var getRes = await _client.GetAsync("/api/users/999999");
         Assert.Equal(HttpStatusCode.NotFound, getRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task Users_Update_OtroUsuarioDebeRetornar403()
+    {
+        var (tokenA, _) = await RegisterAndGetTokenAsync();
+        var (_, idUserB) = await RegisterAndGetTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tokenA);
+
+        var dto = new UpdateUserDto { FullName = "Intento ajeno", Status = "Active" };
+        var res = await _client.PutAsJsonAsync($"/api/users/{idUserB}", dto);
+
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
     }
 
     // ─── Pets ─────────────────────────────────────────────
     [Fact]
     public async Task Pets_CrearYObtenerMascota()
     {
+        var (token, idUser) = await RegisterAndGetTokenAsync("shelter");
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
         var nuevo = new CreatePetDto
         {
-            IdUser = 1,
+            IdUser = idUser,
             Name = "Firulais",
             PetType = "dog",
             Breed = "Labrador",
@@ -197,6 +241,16 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var creado = await createRes.Content.ReadFromJsonAsync<PetDto>();
         Assert.NotNull(creado);
         Assert.Equal("Firulais", creado.Name);
+        // El dueño real es el del JWT, no el que venía en el dto (aquí coinciden a propósito).
+        Assert.Equal(idUser, creado.IdUser);
+    }
+
+    [Fact]
+    public async Task Pets_Crear_SinTokenDebeRetornar401()
+    {
+        var nuevo = new CreatePetDto { Name = "Anonimo", PetType = "dog" };
+        var res = await _client.PostAsJsonAsync("/api/pets", nuevo);
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
     }
 
     [Fact]
@@ -217,9 +271,12 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
     [Fact]
     public async Task Marketplace_CrearYObtenerItem()
     {
+        var (token, idUser) = await RegisterAndGetTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
         var nuevo = new CreateMarketplaceItemDto
         {
-            IdUser = 1,
+            IdUser = idUser,
             Title = "Collar para perro",
             Category = "Accesorios",
             Description = "Collar resistente",
@@ -235,6 +292,15 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
         var creado = await createRes.Content.ReadFromJsonAsync<MarketplaceItemDto>();
         Assert.NotNull(creado);
         Assert.Equal("Collar para perro", creado.Title);
+        Assert.Equal(idUser, creado.IdUser);
+    }
+
+    [Fact]
+    public async Task Marketplace_Crear_SinTokenDebeRetornar401()
+    {
+        var nuevo = new CreateMarketplaceItemDto { Title = "Anonimo", Price = 100 };
+        var res = await _client.PostAsJsonAsync("/api/marketplace-items", nuevo);
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
     }
 
     [Fact]
@@ -249,5 +315,60 @@ public class IntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         var getRes = await _client.GetAsync("/api/marketplace-items/99999");
         Assert.Equal(HttpStatusCode.NotFound, getRes.StatusCode);
+    }
+
+    // ─── Favorites (nuevo) ────────────────────────────────
+    [Fact]
+    public async Task Favorites_AgregarConsultarYQuitar()
+    {
+        var (shelterToken, shelterId) = await RegisterAndGetTokenAsync("shelter");
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", shelterToken);
+        var pet = await _client.PostAsJsonAsync("/api/pets", new CreatePetDto { Name = "Luna", PetType = "cat", IdUser = shelterId });
+        var petCreado = await pet.Content.ReadFromJsonAsync<PetDto>();
+        Assert.NotNull(petCreado);
+
+        var (adopterToken, _) = await RegisterAndGetTokenAsync();
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", adopterToken);
+
+        var add = await _client.PostAsync($"/api/favorites/{petCreado!.IdPet}", new StringContent(string.Empty));
+        Assert.Equal(HttpStatusCode.Created, add.StatusCode);
+
+        var list = await _client.GetFromJsonAsync<List<FavoriteDto>>("/api/favorites");
+        Assert.NotNull(list);
+        Assert.Contains(list!, f => f.IdPet == petCreado.IdPet);
+
+        var remove = await _client.DeleteAsync($"/api/favorites/{petCreado.IdPet}");
+        Assert.Equal(HttpStatusCode.NoContent, remove.StatusCode);
+    }
+
+    [Fact]
+    public async Task Favorites_SinTokenDebeRetornar401()
+    {
+        var res = await _client.GetAsync("/api/favorites");
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
+    // ─── Shelters (nuevo) ─────────────────────────────────
+    [Fact]
+    public async Task Shelters_ListaEsPublicaYSoloIncluyeRefugios()
+    {
+        var (shelterToken, shelterId) = await RegisterAndGetTokenAsync("shelter");
+        _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", shelterToken);
+        // Un registro de tipo "shelter" ya existe (el de arriba); no necesita token para listarse.
+        _client.DefaultRequestHeaders.Authorization = null;
+
+        var shelters = await _client.GetFromJsonAsync<List<UserDto>>("/api/shelters");
+        Assert.NotNull(shelters);
+        Assert.Contains(shelters!, s => s.IdUser == shelterId);
+        Assert.All(shelters!, s => Assert.Equal("shelter", s.UserType, ignoreCase: true));
+    }
+
+    [Fact]
+    public async Task Shelters_GetByIdConUsuarioNoRefugioDebeRetornar404()
+    {
+        var (_, adopterId) = await RegisterAndGetTokenAsync("adopter");
+
+        var res = await _client.GetAsync($"/api/shelters/{adopterId}");
+        Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
     }
 }

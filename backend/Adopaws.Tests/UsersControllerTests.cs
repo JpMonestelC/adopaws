@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using Adopaws.Api.Controllers;
 using Adopaws.Application.DTOs;
 using Adopaws.Application.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -15,6 +17,16 @@ public class UsersControllerTests
     {
         _mockService = new Mock<IUserService>();
         _controller = new UsersController(_mockService.Object);
+    }
+
+    private void AutenticarComo(int userId)
+    {
+        var claims = new[] { new Claim(ClaimTypes.NameIdentifier, userId.ToString()) };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+        };
     }
 
     // ─── GetAll ───────────────────────────────────────────
@@ -83,6 +95,7 @@ public class UsersControllerTests
         var creado = new UserDto { IdUser = 3, FullName = "Carlos", Email = "carlos@test.com" };
         _mockService.Setup(s => s.CreateAsync(dto)).ReturnsAsync(creado);
 
+        // POST /api/users es AllowAnonymous: no requiere autenticación.
         var result = await _controller.Create(dto);
 
         var created = Assert.IsType<CreatedAtActionResult>(result);
@@ -91,8 +104,9 @@ public class UsersControllerTests
 
     // ─── Update ───────────────────────────────────────────
     [Fact]
-    public async Task Update_DebeActualizarUsuarioCorrectamente()
+    public async Task Update_DebeActualizarUsuarioCuandoEsElMismo()
     {
+        AutenticarComo(1);
         var dto = new UpdateUserDto { FullName = "Juan Actualizado", Status = "Active" };
         var actualizado = new UserDto { IdUser = 1, FullName = "Juan Actualizado" };
         _mockService.Setup(s => s.UpdateAsync(1, dto)).ReturnsAsync(actualizado);
@@ -104,8 +118,31 @@ public class UsersControllerTests
     }
 
     [Fact]
+    public async Task Update_DebeRetornar403SiIntentaEditarOtroUsuario()
+    {
+        AutenticarComo(2);
+        var dto = new UpdateUserDto { FullName = "Intento ajeno", Status = "Active" };
+
+        var result = await _controller.Update(1, dto);
+
+        Assert.IsType<ForbidResult>(result);
+        _mockService.Verify(s => s.UpdateAsync(It.IsAny<int>(), It.IsAny<UpdateUserDto>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_SinAutenticarDebeRetornar401()
+    {
+        var dto = new UpdateUserDto { FullName = "X", Status = "Active" };
+
+        var result = await _controller.Update(1, dto);
+
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
+    [Fact]
     public async Task Update_DebeRetornar404SiNoExiste()
     {
+        AutenticarComo(999);
         var dto = new UpdateUserDto { FullName = "X", Status = "Active" };
         _mockService.Setup(s => s.UpdateAsync(999, dto)).ReturnsAsync((UserDto?)null);
 
@@ -116,8 +153,9 @@ public class UsersControllerTests
 
     // ─── Delete ───────────────────────────────────────────
     [Fact]
-    public async Task Delete_DebeEliminarUsuarioCorrectamente()
+    public async Task Delete_DebeEliminarUsuarioCuandoEsElMismo()
     {
+        AutenticarComo(1);
         _mockService.Setup(s => s.DeleteAsync(1)).ReturnsAsync(true);
 
         var result = await _controller.Delete(1);
@@ -126,15 +164,27 @@ public class UsersControllerTests
     }
 
     [Fact]
+    public async Task Delete_DebeRetornar403SiIntentaEliminarOtroUsuario()
+    {
+        AutenticarComo(2);
+
+        var result = await _controller.Delete(1);
+
+        Assert.IsType<ForbidResult>(result);
+        _mockService.Verify(s => s.DeleteAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Delete_DebeRetornar404SiNoExiste()
     {
+        AutenticarComo(999);
         _mockService.Setup(s => s.DeleteAsync(999)).ReturnsAsync(false);
 
         var result = await _controller.Delete(999);
 
         Assert.IsType<NotFoundResult>(result);
     }
-    //-------------------------------------
+
     // ─── Manejo de errores ────────────────────────────────
     [Fact]
     public async Task Create_DebeRetornarErrorSiEmailDuplicado()

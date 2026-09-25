@@ -26,11 +26,17 @@ public class PetService : IPetService
         return pet is null ? null : PetMapper.ToDto(pet);
     }
 
-    public async Task<PetDto> CreateAsync(CreatePetDto dto)
+    public async Task<IEnumerable<PetDto>> GetByUserIdAsync(int userId)
+    {
+        var pets = await _petRepository.GetByUserIdAsync(userId);
+        return pets.Select(PetMapper.ToDto);
+    }
+
+    public async Task<PetDto> CreateAsync(CreatePetDto dto, int ownerUserId)
     {
         var pet = new Pet
         {
-            IdUser = dto.IdUser,
+            IdUser = ownerUserId,
             Name = dto.Name,
             PetType = dto.PetType,
             Breed = dto.Breed,

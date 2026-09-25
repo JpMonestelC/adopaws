@@ -15,6 +15,7 @@ public class AdopawsDbContext : DbContext
     public DbSet<MarketplaceItem> MarketplaceItems => Set<MarketplaceItem>();
     public DbSet<Consultation> Consultations => Set<Consultation>();
     public DbSet<ConsultationResponse> ConsultationResponses => Set<ConsultationResponse>();
+    public DbSet<Favorite> Favorites => Set<Favorite>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,5 +28,6 @@ public class AdopawsDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MarketplaceItemConfiguration());
         modelBuilder.ApplyConfiguration(new ConsultationConfiguration());
         modelBuilder.ApplyConfiguration(new ConsultationResponseConfiguration());
+        modelBuilder.ApplyConfiguration(new FavoriteConfiguration());
     }
 }

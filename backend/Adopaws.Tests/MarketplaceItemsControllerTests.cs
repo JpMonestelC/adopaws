@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using Adopaws.Api.Controllers;
 using Adopaws.Application.DTOs;
 using Adopaws.Application.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -15,6 +17,16 @@ public class MarketplaceItemsControllerTests
     {
         _mockService = new Mock<IMarketplaceItemService>();
         _controller = new MarketplaceItemsController(_mockService.Object);
+    }
+
+    private void AutenticarComo(int userId)
+    {
+        var claims = new[] { new Claim(ClaimTypes.NameIdentifier, userId.ToString()) };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+        };
     }
 
     // ─── GetAll ───────────────────────────────────────────
@@ -71,30 +83,44 @@ public class MarketplaceItemsControllerTests
 
     // ─── Create ───────────────────────────────────────────
     [Fact]
-    public async Task Create_DebeCrearItemCorrectamente()
+    public async Task Create_DebeCrearItemAFavorDelUsuarioAutenticado()
     {
+        AutenticarComo(1);
         var dto = new CreateMarketplaceItemDto
         {
-            IdUser = 1,
             Title = "Juguete",
             Price = 3500,
             Region = "San José"
         };
-        var creado = new MarketplaceItemDto { IdMarketplaceItem = 3, Title = "Juguete", Price = 3500 };
+        var creado = new MarketplaceItemDto { IdMarketplaceItem = 3, IdUser = 1, Title = "Juguete", Price = 3500 };
         _mockService.Setup(s => s.CreateAsync(dto)).ReturnsAsync(creado);
 
         var result = await _controller.Create(dto);
 
         var created = Assert.IsType<CreatedAtActionResult>(result);
         Assert.Equal(creado, created.Value);
+        Assert.Equal(1, dto.IdUser); // el controller sobrescribe IdUser con el del token
+    }
+
+    [Fact]
+    public async Task Create_SinAutenticarDebeRetornar401()
+    {
+        var dto = new CreateMarketplaceItemDto { Title = "Juguete", Price = 3500 };
+
+        var result = await _controller.Create(dto);
+
+        Assert.IsType<UnauthorizedResult>(result);
     }
 
     // ─── Update ───────────────────────────────────────────
     [Fact]
-    public async Task Update_DebeActualizarItemCorrectamente()
+    public async Task Update_DebeActualizarItemCuandoEsDueño()
     {
+        AutenticarComo(1);
         var dto = new UpdateMarketplaceItemDto { Title = "Juguete Actualizado", Price = 4000, PublicationStatus = "Active" };
-        var actualizado = new MarketplaceItemDto { IdMarketplaceItem = 1, Title = "Juguete Actualizado", Price = 4000 };
+        var existente = new MarketplaceItemDto { IdMarketplaceItem = 1, IdUser = 1, Title = "Juguete" };
+        var actualizado = new MarketplaceItemDto { IdMarketplaceItem = 1, IdUser = 1, Title = "Juguete Actualizado", Price = 4000 };
+        _mockService.Setup(s => s.GetByIdAsync(1)).ReturnsAsync(existente);
         _mockService.Setup(s => s.UpdateAsync(1, dto)).ReturnsAsync(actualizado);
 
         var result = await _controller.Update(1, dto);
@@ -104,10 +130,24 @@ public class MarketplaceItemsControllerTests
     }
 
     [Fact]
+    public async Task Update_DebeRetornar403SiNoEsDueño()
+    {
+        AutenticarComo(2);
+        var dto = new UpdateMarketplaceItemDto { Title = "Intento ajeno", PublicationStatus = "Active" };
+        var existente = new MarketplaceItemDto { IdMarketplaceItem = 1, IdUser = 1, Title = "Juguete" };
+        _mockService.Setup(s => s.GetByIdAsync(1)).ReturnsAsync(existente);
+
+        var result = await _controller.Update(1, dto);
+
+        Assert.IsType<ForbidResult>(result);
+    }
+
+    [Fact]
     public async Task Update_DebeRetornar404SiNoExiste()
     {
+        AutenticarComo(1);
         var dto = new UpdateMarketplaceItemDto { Title = "X", PublicationStatus = "Active" };
-        _mockService.Setup(s => s.UpdateAsync(999, dto)).ReturnsAsync((MarketplaceItemDto?)null);
+        _mockService.Setup(s => s.GetByIdAsync(999)).ReturnsAsync((MarketplaceItemDto?)null);
 
         var result = await _controller.Update(999, dto);
 
@@ -116,8 +156,11 @@ public class MarketplaceItemsControllerTests
 
     // ─── Delete ───────────────────────────────────────────
     [Fact]
-    public async Task Delete_DebeEliminarItemCorrectamente()
+    public async Task Delete_DebeEliminarItemCuandoEsDueño()
     {
+        AutenticarComo(1);
+        var existente = new MarketplaceItemDto { IdMarketplaceItem = 1, IdUser = 1, Title = "Juguete" };
+        _mockService.Setup(s => s.GetByIdAsync(1)).ReturnsAsync(existente);
         _mockService.Setup(s => s.DeleteAsync(1)).ReturnsAsync(true);
 
         var result = await _controller.Delete(1);
@@ -126,19 +169,33 @@ public class MarketplaceItemsControllerTests
     }
 
     [Fact]
+    public async Task Delete_DebeRetornar403SiNoEsDueño()
+    {
+        AutenticarComo(2);
+        var existente = new MarketplaceItemDto { IdMarketplaceItem = 1, IdUser = 1, Title = "Juguete" };
+        _mockService.Setup(s => s.GetByIdAsync(1)).ReturnsAsync(existente);
+
+        var result = await _controller.Delete(1);
+
+        Assert.IsType<ForbidResult>(result);
+    }
+
+    [Fact]
     public async Task Delete_DebeRetornar404SiNoExiste()
     {
-        _mockService.Setup(s => s.DeleteAsync(999)).ReturnsAsync(false);
+        AutenticarComo(1);
+        _mockService.Setup(s => s.GetByIdAsync(999)).ReturnsAsync((MarketplaceItemDto?)null);
 
         var result = await _controller.Delete(999);
 
         Assert.IsType<NotFoundResult>(result);
     }
-    //-------------------------------------
+
     // ─── Manejo de errores ────────────────────────────────
     [Fact]
     public async Task Create_DebeRetornarErrorSiDatosInvalidos()
     {
+        AutenticarComo(1);
         var dto = new CreateMarketplaceItemDto { Title = "", Price = 0 };
         _mockService.Setup(s => s.CreateAsync(dto))
             .ThrowsAsync(new InvalidOperationException("Datos inválidos"));

@@ -22,6 +22,18 @@ public class PetPhotoService : IPetPhotoService
         });
     }
 
+    public async Task<PetPhotoDto?> GetByIdAsync(int id)
+    {
+        var photo = await _repo.GetByIdAsync(id);
+        return photo is null ? null : new PetPhotoDto
+        {
+            IdPetPhoto = photo.IdPetPhoto,
+            IdPet = photo.IdPet,
+            PhotoUrl = photo.PhotoUrl,
+            IsMain = photo.IsMain
+        };
+    }
+
     public async Task<PetPhotoDto> CreateAsync(CreatePetPhotoDto dto)
     {
         var photo = new PetPhoto
@@ -257,5 +269,55 @@ public class ConsultationResponseService : IConsultationResponseService
             ResponseMessage = created.ResponseMessage,
             ResponseDate = created.ResponseDate
         };
+    }
+}
+
+public class FavoriteService : IFavoriteService
+{
+    private readonly IFavoriteRepository _repo;
+    private readonly IPetRepository _petRepository;
+
+    public FavoriteService(IFavoriteRepository repo, IPetRepository petRepository)
+    {
+        _repo = repo;
+        _petRepository = petRepository;
+    }
+
+    public async Task<IEnumerable<FavoriteDto>> GetByUserIdAsync(int userId)
+    {
+        var favorites = await _repo.GetByUserIdAsync(userId);
+        return favorites.Select(FavoriteMapper.ToDto);
+    }
+
+    public async Task<bool> IsFavoriteAsync(int userId, int petId)
+        => await _repo.GetByUserAndPetAsync(userId, petId) is not null;
+
+    public async Task<(FavoriteDto Favorite, bool WasCreated)> AddAsync(int userId, int petId)
+    {
+        var existing = await _repo.GetByUserAndPetAsync(userId, petId);
+        if (existing is not null)
+            return (FavoriteMapper.ToDto(existing), false);
+
+        var pet = await _petRepository.GetByIdAsync(petId)
+            ?? throw new KeyNotFoundException($"Mascota {petId} no encontrada.");
+
+        var favorite = new Favorite
+        {
+            IdUser = userId,
+            IdPet = petId,
+            CreatedDate = DateTime.UtcNow
+        };
+        var created = await _repo.CreateAsync(favorite);
+        created.Pet = pet;
+        return (FavoriteMapper.ToDto(created), true);
+    }
+
+    public async Task<bool> RemoveAsync(int userId, int petId)
+    {
+        var existing = await _repo.GetByUserAndPetAsync(userId, petId);
+        if (existing is null) return false;
+
+        await _repo.DeleteAsync(existing.IdFavorite);
+        return true;
     }
 }

@@ -4,10 +4,11 @@ SPA React para la plataforma de adopción de mascotas Adopaws.
 
 ## Stack
 
-- **React 18** + **Vite**
-- **React Router v6** (SPA routing)
+- **React 18** + **Vite 8**
+- **React Router v7** (SPA routing)
 - **Axios** (HTTP client con interceptores JWT)
 - **CSS Modules** (estilos con design system de tokens CSS)
+- **Vitest 5** (unit tests) + `axios-mock-adapter`
 
 ## Estructura
 
@@ -75,10 +76,10 @@ El frontend espera que el API (.NET) esté en la URL configurada en `.env`.
 | Solicitud de adopción | `POST /api/adoption-requests` | ✅ Real |
 | Compatibilidad usuario–mascota | `GET /api/compatibility/:userId/:petId` | ✅ Real (reglas + IA opcional) |
 | Recomendaciones | `GET /api/compatibility/recommendations/:userId?topN=` | ✅ Real (reglas + IA opcional) |
-| Refugios | — | ⚠️ Simulado: `shelterService` filtra `/api/users` por `userType === 'shelter'` |
-| Favoritos | — | ⚠️ Simulado: `favoriteService` guarda ids en `localStorage` (no hay endpoint de backend) |
+| Refugios | `GET /api/shelters`, `/api/shelters/:id`, `/api/shelters/:id/pets` | ✅ Real (endpoint público, filtra `Users` por `userType === 'shelter'` en el backend) |
+| Favoritos | `GET/POST/DELETE /api/favorites` | ✅ Real (requiere sesión; el usuario siempre se identifica por el JWT, nunca se envía un `userId` desde el frontend) |
 
-El token JWT se almacena en `localStorage` (junto con el resto del usuario, bajo la key `adopaws_user`) y se adjunta automáticamente a cada request vía interceptor de axios en `services/api.js`. Ningún endpoint del backend exige el token todavía (`[Authorize]` no está aplicado en los controladores), así que por ahora viaja "listo" para cuando se protejan rutas.
+El token JWT se almacena en `localStorage` (junto con el resto del usuario, bajo la key `adopaws_user`) y se adjunta automáticamente a cada request vía interceptor de axios en `services/api.js`. La mayoría de rutas de escritura y varias de lectura ahora exigen `[Authorize]` en el backend (favoritos, mascotas/marketplace propios, solicitudes de adopción, consultas, compatibilidad, `/api/users`); las rutas de solo lectura pensadas para ser públicas (`pets`, `marketplace-items`, `shelters`) siguen sin requerir sesión. Ver `backend/README.md` para el detalle completo de qué ruta exige qué.
 
 ## Roles
 

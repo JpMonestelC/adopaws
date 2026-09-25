@@ -77,4 +77,19 @@ public class UserService : IUserService
         await _userRepository.DeleteAsync(id);
         return true;
     }
+
+    public async Task<IEnumerable<UserDto>> GetSheltersAsync()
+    {
+        var shelters = await _userRepository.GetByUserTypeAsync("shelter");
+        return shelters.Select(UserMapper.ToDto);
+    }
+
+    public async Task<UserDto?> GetShelterByIdAsync(int id)
+    {
+        var user = await _userRepository.GetByIdAsync(id);
+        if (user is null || !string.Equals(user.UserType, "shelter", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return UserMapper.ToDto(user);
+    }
 }

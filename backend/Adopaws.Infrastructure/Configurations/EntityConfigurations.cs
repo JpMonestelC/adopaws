@@ -137,3 +137,25 @@ public class ConsultationResponseConfiguration : IEntityTypeConfiguration<Consul
                .OnDelete(DeleteBehavior.Restrict);
     }
 }
+
+public class FavoriteConfiguration : IEntityTypeConfiguration<Favorite>
+{
+    public void Configure(EntityTypeBuilder<Favorite> builder)
+    {
+        builder.HasKey(f => f.IdFavorite);
+        builder.Property(f => f.CreatedDate).IsRequired();
+
+        // A user can only favorite the same pet once.
+        builder.HasIndex(f => new { f.IdUser, f.IdPet }).IsUnique();
+
+        builder.HasOne(f => f.User)
+               .WithMany(u => u.Favorites)
+               .HasForeignKey(f => f.IdUser)
+               .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(f => f.Pet)
+               .WithMany(p => p.Favorites)
+               .HasForeignKey(f => f.IdPet)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}

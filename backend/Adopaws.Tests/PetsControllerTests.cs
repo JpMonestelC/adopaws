@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using Adopaws.Api.Controllers;
 using Adopaws.Application.DTOs;
 using Adopaws.Application.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
@@ -15,6 +17,18 @@ public class PetsControllerTests
     {
         _mockService = new Mock<IPetService>();
         _controller = new PetsController(_mockService.Object);
+    }
+
+    /// <summary>Simula un llamante autenticado con el id dado (ver
+    /// ClaimsPrincipalExtensions.GetUserId, que lee este mismo claim).</summary>
+    private void AutenticarComo(int userId)
+    {
+        var claims = new[] { new Claim(ClaimTypes.NameIdentifier, userId.ToString()) };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) }
+        };
     }
 
     // ─── GetAll ───────────────────────────────────────────
@@ -71,11 +85,11 @@ public class PetsControllerTests
 
     // ─── Create ───────────────────────────────────────────
     [Fact]
-    public async Task Create_DebeCrearMascotaCorrectamente()
+    public async Task Create_DebeCrearMascotaAFavorDelUsuarioAutenticado()
     {
+        AutenticarComo(1);
         var dto = new CreatePetDto
         {
-            IdUser = 1,
             Name = "Rex",
             PetType = "dog",
             Breed = "Labrador",
@@ -87,8 +101,8 @@ public class PetsControllerTests
             Description = "Muy juguetón",
             Region = "San José"
         };
-        var creado = new PetDto { IdPet = 3, Name = "Rex", PetType = "dog" };
-        _mockService.Setup(s => s.CreateAsync(dto)).ReturnsAsync(creado);
+        var creado = new PetDto { IdPet = 3, IdUser = 1, Name = "Rex", PetType = "dog" };
+        _mockService.Setup(s => s.CreateAsync(dto, 1)).ReturnsAsync(creado);
 
         var result = await _controller.Create(dto);
 
@@ -96,12 +110,25 @@ public class PetsControllerTests
         Assert.Equal(creado, created.Value);
     }
 
+    [Fact]
+    public async Task Create_SinAutenticarDebeRetornar401()
+    {
+        var dto = new CreatePetDto { Name = "Rex", PetType = "dog" };
+
+        var result = await _controller.Create(dto);
+
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
     // ─── Update ───────────────────────────────────────────
     [Fact]
-    public async Task Update_DebeActualizarMascotaCorrectamente()
+    public async Task Update_DebeActualizarMascotaCorrectamenteCuandoEsDueño()
     {
+        AutenticarComo(1);
         var dto = new UpdatePetDto { Name = "Rex Actualizado", PublicationStatus = "Active" };
-        var actualizado = new PetDto { IdPet = 1, Name = "Rex Actualizado" };
+        var existente = new PetDto { IdPet = 1, IdUser = 1, Name = "Rex" };
+        var actualizado = new PetDto { IdPet = 1, IdUser = 1, Name = "Rex Actualizado" };
+        _mockService.Setup(s => s.GetByIdAsync(1)).ReturnsAsync(existente);
         _mockService.Setup(s => s.UpdateAsync(1, dto)).ReturnsAsync(actualizado);
 
         var result = await _controller.Update(1, dto);
@@ -111,10 +138,24 @@ public class PetsControllerTests
     }
 
     [Fact]
+    public async Task Update_DebeRetornar403SiNoEsDueño()
+    {
+        AutenticarComo(2);
+        var dto = new UpdatePetDto { Name = "Intento ajeno", PublicationStatus = "Active" };
+        var existente = new PetDto { IdPet = 1, IdUser = 1, Name = "Rex" };
+        _mockService.Setup(s => s.GetByIdAsync(1)).ReturnsAsync(existente);
+
+        var result = await _controller.Update(1, dto);
+
+        Assert.IsType<ForbidResult>(result);
+    }
+
+    [Fact]
     public async Task Update_DebeRetornar404SiNoExiste()
     {
+        AutenticarComo(1);
         var dto = new UpdatePetDto { Name = "X", PublicationStatus = "Active" };
-        _mockService.Setup(s => s.UpdateAsync(999, dto)).ReturnsAsync((PetDto?)null);
+        _mockService.Setup(s => s.GetByIdAsync(999)).ReturnsAsync((PetDto?)null);
 
         var result = await _controller.Update(999, dto);
 
@@ -123,8 +164,11 @@ public class PetsControllerTests
 
     // ─── Delete ───────────────────────────────────────────
     [Fact]
-    public async Task Delete_DebeEliminarMascotaCorrectamente()
+    public async Task Delete_DebeEliminarMascotaCorrectamenteCuandoEsDueño()
     {
+        AutenticarComo(1);
+        var existente = new PetDto { IdPet = 1, IdUser = 1, Name = "Rex" };
+        _mockService.Setup(s => s.GetByIdAsync(1)).ReturnsAsync(existente);
         _mockService.Setup(s => s.DeleteAsync(1)).ReturnsAsync(true);
 
         var result = await _controller.Delete(1);
@@ -133,20 +177,35 @@ public class PetsControllerTests
     }
 
     [Fact]
+    public async Task Delete_DebeRetornar403SiNoEsDueño()
+    {
+        AutenticarComo(2);
+        var existente = new PetDto { IdPet = 1, IdUser = 1, Name = "Rex" };
+        _mockService.Setup(s => s.GetByIdAsync(1)).ReturnsAsync(existente);
+
+        var result = await _controller.Delete(1);
+
+        Assert.IsType<ForbidResult>(result);
+    }
+
+    [Fact]
     public async Task Delete_DebeRetornar404SiNoExiste()
     {
-        _mockService.Setup(s => s.DeleteAsync(999)).ReturnsAsync(false);
+        AutenticarComo(1);
+        _mockService.Setup(s => s.GetByIdAsync(999)).ReturnsAsync((PetDto?)null);
 
         var result = await _controller.Delete(999);
 
         Assert.IsType<NotFoundResult>(result);
     }
-    //-------------------------------------// ─── Manejo de errores ────────────────────────────────
+
+    // ─── Manejo de errores ────────────────────────────────
     [Fact]
     public async Task Create_DebeRetornarErrorSiDatosInvalidos()
     {
+        AutenticarComo(1);
         var dto = new CreatePetDto { Name = "", PetType = "" };
-        _mockService.Setup(s => s.CreateAsync(dto))
+        _mockService.Setup(s => s.CreateAsync(dto, 1))
             .ThrowsAsync(new InvalidOperationException("Datos inválidos"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => _controller.Create(dto));

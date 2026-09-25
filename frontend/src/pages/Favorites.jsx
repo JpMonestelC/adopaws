@@ -3,8 +3,8 @@ import { favoriteService } from '../services/api'
 import PetCard from '../components/pets/PetCard'
 import styles from './SimpleList.module.css'
 
-// Los favoritos se guardan localmente (ver favoriteService en services/api.js):
-// el backend todavía no expone un endpoint de favoritos por usuario.
+// Los favoritos viven en el backend (GET /api/favorites, ver favoriteService
+// en services/api.js) y se resuelven contra el usuario autenticado por JWT.
 export default function Favorites() {
  const [favs, setFavs] = useState([])
  const [loading, setLoading] = useState(true)

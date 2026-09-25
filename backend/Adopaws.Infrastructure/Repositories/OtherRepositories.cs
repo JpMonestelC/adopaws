@@ -201,3 +201,40 @@ public class ConsultationResponseRepository : IConsultationResponseRepository
         return response;
     }
 }
+
+public class FavoriteRepository : IFavoriteRepository
+{
+    private readonly AdopawsDbContext _context;
+    public FavoriteRepository(AdopawsDbContext context) => _context = context;
+
+    public async Task<IEnumerable<Favorite>> GetByUserIdAsync(int userId)
+        => await _context.Favorites.AsNoTracking()
+            .Include(f => f.Pet)
+            .Where(f => f.IdUser == userId)
+            .OrderByDescending(f => f.CreatedDate)
+            .ToListAsync();
+
+    public async Task<Favorite?> GetByIdAsync(int id)
+        => await _context.Favorites.Include(f => f.Pet).FirstOrDefaultAsync(f => f.IdFavorite == id);
+
+    public async Task<Favorite?> GetByUserAndPetAsync(int userId, int petId)
+        => await _context.Favorites.Include(f => f.Pet)
+            .FirstOrDefaultAsync(f => f.IdUser == userId && f.IdPet == petId);
+
+    public async Task<Favorite> CreateAsync(Favorite favorite)
+    {
+        _context.Favorites.Add(favorite);
+        await _context.SaveChangesAsync();
+        return favorite;
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        var favorite = await _context.Favorites.FindAsync(id);
+        if (favorite is not null)
+        {
+            _context.Favorites.Remove(favorite);
+            await _context.SaveChangesAsync();
+        }
+    }
+}

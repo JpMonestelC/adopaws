@@ -6,7 +6,10 @@ public interface IPetService
 {
     Task<IEnumerable<PetDto>> GetAllAsync();
     Task<PetDto?> GetByIdAsync(int id);
-    Task<PetDto> CreateAsync(CreatePetDto dto);
+    Task<IEnumerable<PetDto>> GetByUserIdAsync(int userId);
+    // ownerUserId viene del JWT del llamante (ver PetsController.Create),
+    // nunca del dto.IdUser que manda el cliente.
+    Task<PetDto> CreateAsync(CreatePetDto dto, int ownerUserId);
     Task<PetDto?> UpdateAsync(int id, UpdatePetDto dto);
     Task<bool> DeleteAsync(int id);
 }
@@ -14,6 +17,7 @@ public interface IPetService
 public interface IPetPhotoService
 {
     Task<IEnumerable<PetPhotoDto>> GetByPetIdAsync(int petId);
+    Task<PetPhotoDto?> GetByIdAsync(int id);
     Task<PetPhotoDto> CreateAsync(CreatePetPhotoDto dto);
     Task<bool> DeleteAsync(int id);
 }
@@ -50,4 +54,13 @@ public interface IConsultationResponseService
 {
     Task<IEnumerable<ConsultationResponseDto>> GetByConsultationIdAsync(int consultationId);
     Task<ConsultationResponseDto> CreateAsync(CreateConsultationResponseDto dto);
+}
+
+public interface IFavoriteService
+{
+    Task<IEnumerable<FavoriteDto>> GetByUserIdAsync(int userId);
+    Task<bool> IsFavoriteAsync(int userId, int petId);
+    // Devuelve (dto, wasCreated): wasCreated=false si ya existía (idempotente).
+    Task<(FavoriteDto Favorite, bool WasCreated)> AddAsync(int userId, int petId);
+    Task<bool> RemoveAsync(int userId, int petId);
 }

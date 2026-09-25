@@ -22,4 +22,5 @@ public class User
     public ICollection<Consultation> SentConsultations { get; set; } = new List<Consultation>();
     public ICollection<Consultation> ReceivedConsultations { get; set; } = new List<Consultation>();
     public ICollection<ConsultationResponse> ConsultationResponses { get; set; } = new List<ConsultationResponse>();
+    public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
 }
