@@ -148,6 +148,12 @@ public class FavoriteConfiguration : IEntityTypeConfiguration<Favorite>
         // A user can only favorite the same pet once.
         builder.HasIndex(f => new { f.IdUser, f.IdPet }).IsUnique();
 
+        // Both FKs can't cascade: User already cascades to Pets, and Pet would also
+        // cascade to Favorites, giving SQL Server two delete paths from User down to
+        // Favorites (multiple cascade paths are rejected at the DDL level). Same
+        // trade-off already made for AdoptionRequest above: keep the User side
+        // cascading (deleting an account clears its favorites) and require the Pet
+        // side to be restricted.
         builder.HasOne(f => f.User)
                .WithMany(u => u.Favorites)
                .HasForeignKey(f => f.IdUser)
@@ -156,6 +162,6 @@ public class FavoriteConfiguration : IEntityTypeConfiguration<Favorite>
         builder.HasOne(f => f.Pet)
                .WithMany(p => p.Favorites)
                .HasForeignKey(f => f.IdPet)
-               .OnDelete(DeleteBehavior.Cascade);
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }

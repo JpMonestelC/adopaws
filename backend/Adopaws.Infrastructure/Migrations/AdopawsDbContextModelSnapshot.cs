@@ -436,7 +436,7 @@ namespace Adopaws.Infrastructure.Migrations
                     b.HasOne("Adopaws.Domain.Entities.Pet", "Pet")
                         .WithMany("Favorites")
                         .HasForeignKey("IdPet")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Adopaws.Domain.Entities.User", "User")

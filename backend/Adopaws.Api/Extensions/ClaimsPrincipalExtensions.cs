@@ -11,12 +11,17 @@ namespace Adopaws.Api.Extensions;
 /// </summary>
 public static class ClaimsPrincipalExtensions
 {
-    public static int? GetUserId(this ClaimsPrincipal user)
+    // `user` can be null here even on a real request (an anonymous request still
+    // reaches an [Authorize]-exempt action with an empty, non-null principal, but
+    // ControllerBase.User itself returns null whenever no HttpContext is attached —
+    // notably in a unit test that never sets ControllerContext). Guard here instead
+    // of forcing every caller to null-check first.
+    public static int? GetUserId(this ClaimsPrincipal? user)
     {
-        var value = user.FindFirstValue(ClaimTypes.NameIdentifier);
+        var value = user?.FindFirstValue(ClaimTypes.NameIdentifier);
         return int.TryParse(value, out var id) ? id : null;
     }
 
-    public static string? GetUserType(this ClaimsPrincipal user)
-        => user.FindFirstValue(ClaimTypes.Role);
+    public static string? GetUserType(this ClaimsPrincipal? user)
+        => user?.FindFirstValue(ClaimTypes.Role);
 }

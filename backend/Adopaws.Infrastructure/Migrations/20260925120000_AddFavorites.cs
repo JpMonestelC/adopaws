@@ -29,7 +29,7 @@ namespace Adopaws.Infrastructure.Migrations
                         column: x => x.IdPet,
                         principalTable: "Pets",
                         principalColumn: "IdPet",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_Favorites_Users_IdUser",
                         column: x => x.IdUser,

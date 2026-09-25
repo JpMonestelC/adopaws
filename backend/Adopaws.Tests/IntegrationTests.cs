@@ -18,12 +18,20 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
+            // EF Core's AddDbContext registers more than just DbContextOptions<T> —
+            // newer versions also add an internal IDbContextOptionsConfiguration<T>
+            // (not a public type we can reference directly) that still carries the
+            // original UseSqlServer(...) call from AddInfrastructure(). Removing only
+            // DbContextOptions<AdopawsDbContext> leaves that internal registration
+            // behind, so at runtime BOTH the SqlServer and the InMemory provider end
+            // up configured on the same DbContext, which EF Core rejects with
+            // "Services for database providers ... have been registered". Matching by
+            // FullName instead of a fixed list of types removes every registration
+            // that mentions AdopawsDbContext, public or internal, so no leftover
+            // provider configuration survives the swap.
             var descriptors = services.Where(d =>
-                d.ServiceType == typeof(DbContextOptions<AdopawsDbContext>) ||
-                d.ServiceType == typeof(DbContextOptions) ||
                 d.ServiceType == typeof(AdopawsDbContext) ||
-                (d.ServiceType.IsGenericType &&
-                 d.ServiceType.GetGenericTypeDefinition() == typeof(DbContextOptions<>))
+                (d.ServiceType.FullName?.Contains(nameof(AdopawsDbContext)) ?? false)
             ).ToList();
 
             foreach (var d in descriptors)
